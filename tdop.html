@@ -1,0 +1,956 @@
+<html><head><title>Top Down Operator Precedence</title>
+<style>
+pre {margin-left: 4em; margin-right: 4em;}
+</style></head><body bgcolor="linen" style="margin: 8%;">
+<h1>Top Down Operator Precedence</h1>
+
+<p><a href="http://www.crockford.com/">Douglas Crockford</a></p>
+
+<p>2007-02-21</p>
+<h2>Introduction</h2>
+
+<p><a href="http://boole.stanford.edu/pratt.html">Vaughan Pratt</a> presented
+  <a href="http://portal.acm.org/citation.cfm?id=512931">"Top Down Operator
+  Precedence"</a> at the first annual <a href="http://www.acm.org/sigs/sigplan/popl.htm">Principles
+  of Programming Languages Symposium</a> in Boston in 1973. In the paper
+  Pratt described a parsing technique that combines the best properties
+  of Recursive Descent and <a href="http://sigact.acm.org/floyd/">Floyd</a>'s
+  Operator Precedence. It is easy to use. It feels a lot like Recursive
+  Descent, but with the need for less code and with significantly better
+  performance. He claimed the technique is simple to understand, trivial
+  to implement, easy to use, extremely efficient, and very flexible. It
+  is dynamic, providing support for truly extensible languages. </p>
+<p>Oddly enough, such an obviously utopian approach to compiler construction
+  is completely neglected today. Why is this? Pratt suggested in the paper
+  that a preoccupation with BNF grammars and their various offspring, along
+  with their related automata and theorems, has precluded development in
+  directions that are not visibly in the domain of automata theory.</p>
+
+<p>Another explanation is that his technique is most effective when used
+  in a dynamic, functional programming language. Its use in a static, procedural
+  language would be considerably more difficult. In the paper, Pratt used
+  LISP and almost effortlessly built parse trees from streams of tokens.
+  But parsing techniques are not greatly valued in the LISP community, which
+  celebrates the Spartan denial of syntax. There have been many attempts
+  since LISP's creation to give the language a rich ALGOL-like syntax, including
+  <a href="http://zane.brouhaha.com/%7Ehealyzh/doc/cgol.doc.txt">Pratt's
+  CGOL</a>, <a href="http://community.computerhistory.org/scc/projects/LISP/index.html#LISP_2_">LISP
+  2</a>, <a href="ftp://reports.stanford.edu/pub/cstr/reports/cs/tr/68/92/CS-TR-68-92.pdf">MLISP</a>,
+  <a href="http://www.opendylan.org/">Dylan</a>, <a href="http://community.computerhistory.org/scc/projects/LISP/interlisp/Teitelman-3IJCAI.pdf">Interlisp's
+  Clisp</a>, and <a href="http://www-formal.stanford.edu/jmc/history/lisp/lisp.html">McCarthy's
+  original M-expressions</a>. All failed to find acceptance. That community
+  found the correspondence between programs and data to be much more valuable
+  than expressive syntax. But the mainstream programming community likes
+  its syntax, so LISP has never been accepted by the mainstream. Pratt's
+  technique wants a dynamic language, but dynamic language communities historically
+  have had no use for the syntax that Pratt's technique conveniently realizes.</p>
+
+<h2>JavaScript</h2>
+
+<p>The situation changes with the advent of JavaScript.
+JavaScript is a dynamic, functional language, but syntactically it is obviously
+a member of the C family. It is a dynamic language with a community that likes
+syntax.</p>
+
+<p>JavaScript is also object-oriented. Pratt's 1973 paper anticipated object orientation
+  but lacked an expressive notation for it. JavaScript is an ideal
+  language for exploiting Pratt's technique. I will show that we can quickly
+  and inexpensively produce parsers in JavaScript.</p>
+
+<p>We don't have time in this short chapter to deal with the whole JavaScript
+  language, and perhaps we wouldn't want to because the language is a mess.
+  But it has some brilliant stuff in it that is well worth consideration.
+  We will build a parser that can process Simplified JavaScript. We will
+  write the parser in Simplified JavaScript. Simplified JavaScript is just
+  the good stuff, including:</p>
+
+<ul>
+  <li>Functions as first class objects. Functions in Simplified JavaScript
+    are lambdas with lexical scoping.</li>
+ <li>Dynamic objects with prototypal inheritance. Objects are
+     class-free. We can add a new member to any object by ordinary assignment.
+     An object can inherit members from another object.</li>
+ <li>Object literals and array literals. This is a very convenient notation for
+     creating new objects and arrays. JavaScript literals were the inspiration
+     for the <a href="http://www.json.org/">JSON</a> data interchange format.</li>
+</ul>
+
+<p>We will take advantage of JavaScript's prototypal nature to make token
+  objects that inherit from symbols. Our implementation depends on an <code>Object.create</code>
+  method (which makes a new object that inherits members from an existing
+  object) and a tokenizer (which produces an array of simple token objects
+  from a string). We will advance through this array of tokens as we grow
+  our parse tree. </p>
+<h2>Symbol Table</h2>
+
+<p>Every token, such as an operator or identifier, will inherit from a symbol.
+  We will keep all of our symbols (which determine the types of tokens in
+  our language) in a <code>symbol_table</code> object.</p>
+
+<pre>var symbol_table = {};</pre>
+<p>The <code>original_symbol</code> object is the prototype for all other
+  symbols. Its methods will usually be overridden. (We will describe the
+  role of <code>nud</code> and <code>led</code> and binding powers in the
+  section on Precedence below). </p>
+<pre>var original_symbol = {
+    nud: function () {
+        this.error("Undefined.");
+    },
+    led: function (left) {
+        this.error("Missing operator.");
+    }
+};</pre>
+
+<p>Let's define a function that makes symbols. It takes a symbol <code>id</code>
+  and an optional binding power that defaults to 0 and returns a symbol
+  object for that <code>id</code>. If the symbol already exists in the <code>symbol_table</code>,
+  the function returns that symbol object. Otherwise, it makes a new symbol
+  object that inherits from the <code>original_symbol</code>, stores it
+  in the symbol table, and returns it. A symbol object initially contains
+  an <code>id</code>, a value, a left binding power, and the stuff it inherits
+  from the <code>original_symbol</code>. </p>
+
+<pre>var symbol = function (id, bp) {
+    var s = symbol_table[id];
+    bp = bp || 0;
+    if (s) {
+        if (bp &gt;= s.lbp) {
+            s.lbp = bp;
+        }
+    } else {
+        s = Object.create(original_symbol);
+        s.id = s.value = id;
+        s.lbp = bp;
+        symbol_table[id] = s;
+    }
+    return s;
+};</pre>
+
+<p>The following symbols are popular separators and closers.</p>
+<pre>symbol(":");
+symbol(";");
+symbol(",");
+symbol(")");
+symbol("]");
+symbol("}");
+symbol("else");</pre>
+
+<p>The <code>(end)</code> symbol indicates the end of the token stream.
+  The <code>(name)</code> symbol is the prototype for new names, such as
+  variable names. The parentheses that I've included in the ids of these
+  symbols avoid collisions with user-defined tokens.</p>
+
+<pre>symbol("(end)");
+symbol("(name)");</pre>
+
+<h2>Tokens</h2>
+
+<p>We assume that the source text has been transformed into an array of
+  simple token objects (<code>tokens</code>), each containing a <code>type</code>
+  member (<code>"name"</code>, <code>"string"</code>, <code>"number"</code>,
+  or <code>"operator"</code>), and a <code>value</code> member, which is
+  a string or number.</p>
+
+<p>The <code>token</code> variable always contains the current token.</p>
+
+<pre>var token;</pre>
+
+<p>The <code>advance</code> function makes a new token object from the next
+  simple token in the array and assigns it to the <code> token</code> variable.
+  It can take an optional <code>id</code> parameter which it can check against
+  the <code>id</code> of the previous token. The new token object's prototype
+  is a <code>(name)</code> token in the current scope or a symbol from the
+  symbol table. The new token's <code>arity</code> is <code>"name"</code>,
+  <code>"literal"</code>, or <code>"operator"</code>. Its <code>arity</code>
+  may be changed later to <code>"binary"</code>, <code>"unary"</code>, or
+  <code>"statement"</code> when we know more about the token's role in the
+  program.</p>
+
+<pre>var advance = function (id) {
+    var a, o, t, v;
+    if (id &amp;&amp; token.id !== id) {
+        token.error("Expected '" + id + "'.");
+    }
+    if (token_nr &gt;= tokens.length) {
+        token = symbol_table["(end)"];
+        return;
+    }
+    t = tokens[token_nr];
+    token_nr += 1;
+    v = t.value;
+    a = t.type;
+    if (a === "name") {
+        o = scope.find(v);
+    } else if (a === "operator") {
+        o = symbol_table[v];
+        if (!o) {
+            t.error("Unknown operator.");
+        }
+    } else if (a === "string" || a ===  &quot;number") {
+        a = "literal";
+        o = symbol_table["(literal)"];
+    } else {
+        t.error("Unexpected token.");
+    }
+    token = Object.create(o);
+    token.value = v;
+    token.arity = a;
+    return token;
+};</pre>
+
+<h2 id="scope">Scope</h2>
+
+<p>Most languages have some notation for defining new symbols (such as variable
+  names). In a very simple language, when we encounter a new word, we might
+  give it a definition and put it in the symbol table. In a more sophisticated
+  language, we would want to have scope, giving the programmer convenient
+  control over the lifespan and visibility of a variable. </p>
+
+<p>A scope is a region of a program in which a variable is defined and
+accessible. Scopes can be nested inside of other scopes. Variables
+defined in a scope are not visible outside of the scope.</p>
+
+<p>We will keep the current scope object in the <code>scope</code> variable. </p>
+<pre>var scope;</pre>
+<p>The <code>original_scope</code> is the prototype for all scope objects. It
+  contains a <code>define</code> method that is used to define new variables
+  in the scope. The <code>define</code> method transforms a name token into a
+  variable token. It produces an error if the variable has already been defined
+  in the scope or if the name has already been used as a reserved word.</p>
+
+<pre>var itself = function () {
+    return this;
+};</pre>
+
+<pre>var original_scope = {
+    define: function (n) {
+        var t = this.def[n.value];
+        if (typeof t === "object") {
+            n.error(t.reserved ?
+                "Already reserved." :
+                "Already defined.");
+        }
+        this.def[n.value] = n;
+        n.reserved = false;
+        n.nud      = itself;
+        n.led      = null;
+        n.std      = null;
+        n.lbp      = 0;
+        n.scope    = scope;
+        return n;
+    },</pre>
+
+<p>The <code>find</code> method is used to find the definition of a name.
+  It starts with the current scope and seeks, if necessary, back through
+  the chain of parent scopes and ultimately to the symbol table. It returns
+  <code>symbol_table["(name)&quot;]</code> if it cannot find a definition.</p>
+<p>The <code>find</code> method tests the values it finds to determine that
+they are not <code>undefined</code> (which would indicate an undeclared name)
+and not a function (which would indicate a collision with an inherited method).</p>
+
+<pre>    find: function (n) {
+            var e = this, o;
+            while (true) {
+                o = e.def[n];
+                if (o && typeof o !== 'function') {
+                    return e.def[n];
+                }
+                e = e.parent;
+                if (!e) {
+                    o = symbol_table[n];
+                    return o && typeof o !== 'function' ?
+                            o : symbol_table["(name)"];
+                }
+            }
+        },</pre>
+
+<p>The <code>pop</code> method closes a scope, giving focus back to the
+  parent.</p>
+
+<pre>    pop: function () {
+        scope = this.parent;
+    },</pre>
+
+<p>The <code>reserve</code> method is used to indicate that a name has been
+used as a reserved word in the current scope.</p>
+
+<pre>    reserve: function (n) {
+        if (n.arity !== "name" || n.reserved) {
+            return;
+        }
+        var t = this.def[n.value];
+        if (t) {
+            if (t.reserved) {
+                return;
+            }
+            if (t.arity === "name") {
+                n.error("Already defined.");
+            }
+        }
+        this.def[n.value] = n;
+        n.reserved = true;
+    }
+};</pre>
+
+<p>We need a policy for reserved words. In some languages, words that are used
+  structurally (such as <code>if</code>) are reserved and cannot be used as variable
+  names. The flexibility of our parser allows us to have a more useful policy.
+  For example, we can say that in any function, any name may be used as a structure
+  word or as a variable, but not as both. We will reserve words locally only after
+  they are used as reserved words. This makes things better for the language designer
+  because adding new structure words to the language will not break existing programs,
+  and it makes things better for programmers because they are not hampered by
+  irrelevant restrictions on the use of names.</p>
+
+<p>Whenever we want to establish a new scope for a function or
+a block we call the <code>new_scope</code> function, which makes a new
+instance of the original scope prototype.</p>
+
+<pre>var new_scope = function () {
+    var s = scope;
+    scope = Object.create(original_scope);
+    scope.def = {};
+    scope.parent = s;
+    return scope;
+};</pre>
+
+<h2>Precedence</h2>
+
+<p>Tokens are objects that bear methods allowing them to make precedence
+  decisions, match other tokens, and build trees (and in a more ambitious
+  project, also check types and optimize and generate code). The basic precedence
+  problem is this: Given an operand between two operators, is the operand
+  bound to the left operator or the right?</p>
+
+<p style="text-align: center;" align="center"><code> d&nbsp;</code><i>A</i><code>&nbsp;e&nbsp;</code><i>B</i><code>&nbsp;f</code></p>
+
+<p>If <i>A</i> and <i>B</i> are operators, does operand <code>e</code> bind
+  to <i>A</i> or to <i>B</i>? In other words, are we talking about </p>
+
+<p style="text-align: center;" align="center"><code> (d&nbsp;</code><i>A</i><code>
+  e)&nbsp;</code><i>B</i><code>&nbsp;f&nbsp;&nbsp; </code>or<code> &nbsp;&nbsp;d&nbsp;</code><i>A</i><code>&nbsp;(e&nbsp;</code><i>B</i><code>
+  f)&nbsp;</code>?</p>
+
+<p>Ultimately, the complexity in the process of parsing comes down to the
+  resolution of this ambiguity. The technique we will develop here uses
+  token objects whose members include binding powers (or precedence levels),
+  and simple methods called <code>nud</code> (null denotation) and <code>led</code>
+  (left denotation). A <code>nud</code> does not care about the tokens to
+  the left. A <code>led</code> does. A <code> nud</code> method is used
+  by values (such as variables and literals) and by prefix operators. A
+  <code>led</code> method is used by infix operators and suffix operators.
+  A token may have both a <code>nud</code> method and a <code> led</code>
+  method. For example, <code>-</code> might be both a prefix operator (negation)
+  and an infix operator (subtraction), so it would have both <code>nud</code>
+  and <code>led</code> methods. </p>
+<p>In our parser, we will use these binding powers:</p>
+<table border="2" align="center"><tbody>
+  <tr>
+    <td>0</td>
+    <td>non-binding operators like <code><code>;</code></code></td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td>assignment operators like <code><code>=</code></code></td>
+  </tr>
+  <tr>
+    <td>20</td>
+    <td><code><code>?</code></code></td>
+  </tr>
+  <tr>
+    <td>30</td>
+    <td><code>|| &amp;&amp;</code></td>
+  </tr>
+  <tr>
+    <td>40</td>
+    <td>relational operators like <code>===</code></td>
+  </tr>
+  <tr>
+    <td>50</td>
+    <td><code>+ -</code></td>
+  </tr>
+  <tr>
+    <td>60</td>
+    <td><code>* /</code></td>
+  </tr>
+  <tr>
+    <td>70</td>
+    <td>unary operators like <code>!</code></td>
+  </tr>
+  <tr>
+    <td>80</td>
+    <td><code>. [ (</code></td>
+  </tr></tbody>
+</table>
+<h2>Expressions</h2>
+
+<p>The heart of Pratt's technique is the <code>expression</code> function.
+  It takes a right binding power that controls how aggressively it binds
+  to tokens on its right. </p>
+
+<pre>var expression = function (rbp) {
+    var left;
+    var t = token;
+    advance();
+    left = t.nud();
+    while (rbp &lt; token.lbp) {
+        t = token;
+        advance();
+        left = t.led(left);
+    }
+    return left;
+}</pre>
+
+<p><code>expression</code> calls the <code>nud</code> method of the
+<code>token</code>. The <code>nud</code> is used to process literals,
+variables, and prefix operators. Then as long as the right binding
+power is less than the left binding power of the next token, the
+<code>led</code> method is invoked on the following token. The <code>led</code> is used
+to process infix and suffix operators. This process can be recursive
+because the <code>nud</code> and <code>led</code> methods
+can call <code>expression</code>.</p>
+
+<h2>Infix Operators</h2>
+
+<p>The <code>+</code> operator is an infix operator, so it has a <code>
+  led</code> method that weaves the token object into a tree whose two branches
+  (<code>first</code> and <code>second</code>) are the operand to the left
+  of the <code>+</code> and the operand to the right. The left operand is
+  passed into the <code>led</code>, which then obtains the right operand
+  by calling the <code>expression</code> function. </p>
+
+<pre>symbol("+", 50).led = function (left) {
+    this.first = left;
+    this.second = expression(50);
+    this.arity = "binary";
+    return this;
+};</pre>
+
+<p>The symbol for <code>*</code> is the same as <code>+</code> except for
+  the <code>id</code> and binding powers. It has a higher binding power
+  because it binds more tightly.</p>
+
+<pre>symbol("*", 60).led = function (left) {
+    this.first = left;
+    this.second = expression(60);
+    this.arity = "binary";
+    return this;
+};</pre>
+
+<p>Not all infix operators will be this similar, but many will, so we can
+  make our work easier by defining an <code>infix</code> function that will
+  help us make symbols for infix operators. The <code>infix</code> function
+  takes an <code>id</code>, a binding power, and an optional <code>led</code>
+  function. If a <code>led</code> function is not provided, the <code>infix</code>
+  function supplies a default <code>led</code> that is useful in most cases.</p>
+
+<pre>var infix = function (id, bp, led) {
+    var s = symbol(id, bp);
+    s.led = led || function (left) {
+        this.first = left;
+        this.second = expression(bp);
+        this.arity = "binary";
+        return this;
+    };
+    return s;
+}</pre>
+
+<p>This allows a more declarative style for specifying infix operators:</p>
+
+<pre>infix("+", 50);
+infix("-", 50);
+infix("*", 60);
+infix("/", 60);</pre>
+
+<p><code>===</code> is JavaScript's exact equality comparison operator.</p>
+
+<pre>infix("===", 40);
+infix("!==", 40);
+infix("&lt;", 40);
+infix("&lt;=", 40);
+infix("&gt;", 40);
+infix("&gt;=", 40);</pre>
+
+<p>The ternary operator takes three expressions, separated by <code>?</code>
+and <code>:</code>. It is not an ordinary infix operator, so we need to supply
+its <code>led</code> function.</p>
+
+<pre>infix("?", 20, function (left) {
+    this.first = left;
+    this.second = expression(0);
+    advance(":");
+    this.third = expression(0);
+    this.arity = "ternary";
+    return this;
+});</pre>
+
+<p>The <code>.</code> operator is used to select a member of an object. The token
+  on the right must be a name, but it will be used as a literal.</p>
+
+<pre>infix(".", 80, function (left) {
+    this.first = left;
+    if (token.arity !== "name") {
+        token.error("Expected a property name.");
+    }
+    token.arity = "literal";
+    this.second = token;
+    this.arity = "binary";
+    advance();
+    return this;
+});</pre>
+
+<p>The <code>[</code> operator is used to dynamically select a member
+from an object or array. The expression on the right must be followed
+by a closing <code>]</code>.</p>
+
+<pre>infix("[", 80, function (left) {
+    this.first = left;
+    this.second = expression(0);
+    this.arity = "binary";
+    advance("]");
+    return this;
+});</pre>
+
+<p>Those infix operators are left associative. We can also make right associative
+  operators, such as short-circuiting logical operators, by reducing the
+  right binding power.</p>
+
+<pre>var infixr = function (id, bp, led) {
+    var s = symbol(id, bp);
+    s.led = led || function (left) {
+        this.first = left;
+        this.second = expression(bp - 1);
+        this.arity = "binary";
+        return this;
+    };
+    return s;
+}</pre>
+<p>The <code>&amp;&amp;</code> operator returns the first operand if the
+  first operand is falsy. Otherwise, it returns the second operand. The
+  <code>||</code> operator returns the first operand if the first operand
+  is truthy. Otherwise, it returns the second operand. (The falsy values
+  are the number <code>0</code>, the empty string <code>&quot;&quot;</code>,
+  and the values <code>false</code> and <code>null</code>. All other values
+  (including all objects) are truthy.)</p>
+
+<pre>infixr("&amp;&amp;", 30);
+infixr("||", 30);</pre>
+
+<h2>Prefix Operators</h2>
+
+<p>The code we used for right associative infix operators can be adapted
+  for prefix operators. Prefix operators are right associative. A prefix
+  does not have a left binding power because it does not bind to the left.
+  Prefix operators can also sometimes be reserved words.</p>
+
+<pre>var prefix = function (id, nud) {
+    var s = symbol(id);
+    s.nud = nud || function () {
+        scope.reserve(this);
+        this.first = expression(70);
+        this.arity = "unary";
+        return this;
+    };
+    return s;
+}</pre>
+<pre>prefix("-");
+prefix("!");
+prefix("typeof");</pre>
+
+<p>The <code>nud</code> of <code>(</code> will call <code>advance(")")</code>
+  to match a balancing <code>)</code> token. The <code>(</code> token does
+  not become part of the parse tree because the <code>nud</code> returns
+  the inner expression. </p>
+
+<pre>prefix("(", function () {
+    var e = expression(0);
+    advance(")");
+    return e;
+});</pre>
+
+<h2>Assignment Operators</h2>
+
+<p>We could use <code>infixr</code> to define our assignment operators,
+  but we will make a specialized <code>assignment</code> function because
+  we want it to do two extra bits of business: examine the left operand
+  to make sure that it is a proper lvalue, and set an <code>assignment</code>
+  member so that we can later quickly identify assignment statements. </p>
+
+<pre>var assignment = function (id) {
+    return infixr(id, 10, function (left) {
+        if (left.id !== "." &amp;&amp; left.id !== "[" &amp;&amp;
+                left.arity !== "name") {
+            left.error("Bad lvalue.");
+        }
+        this.first = left;
+        this.second = expression(9);
+        this.assignment = true;
+        this.arity = "binary";
+        return this;
+    });
+};</pre>
+
+<pre>assignment("=");
+assignment("+=");
+assignment("-=");</pre>
+
+<p>Notice that we have implemented a sort of inheritance pattern, where
+<code>assignment</code> returns the result of calling <code>infixr</code>,
+and <code>infixr</code> returns the result of calling <code>symbol</code>.</p>
+
+<h2>Constants</h2>
+
+<p>The <code>constant</code>
+function builds constants into the language. The <code>nud</code> mutates a name token into a literal
+token.</p>
+
+<pre>var constant = function (s, v) {
+    var x = symbol(s);
+    x.nud = function () {
+        scope.reserve(this);
+        this.value = symbol_table[this.id].value;
+        this.arity = "literal";
+        return this;
+    };
+    x.value = v;
+    return x;
+};</pre>
+
+<pre>constant("true", true);
+constant("false", false);
+constant("null", null);</pre>
+
+<pre>constant("pi", 3.141592653589793);</pre>
+<p>The <code>(literal)</code> symbol is the prototype for all string and
+  number literals. The <code>nud</code> method of a literal token returns
+  the token itself.</p>
+
+<pre>symbol("(literal)").nud = itself;</pre>
+
+
+<h2>Statements</h2>
+
+<p>Pratt's original formulation worked with functional languages in which
+  everything is an expression. Most mainstream languages have statements
+  that are not as nestable as expressions. We can easily handle statements
+  by adding another method to tokens, the <code>std</code> (statement denotation).
+  A <code>std</code> is like a <code>nud</code> except that it is used only
+  at the beginning of a statement.</p>
+
+<p>The <code>statement</code> function parses one statement. If the current
+  token has an <code>std</code> method, the token is reserved and the <code>std</code>
+  is invoked. Otherwise,we assume an expression statement terminated with
+  a semi-colon. For reliability, we will reject an expression statement
+  that is not an assignment or invocation.</p>
+
+<pre>var statement = function () {
+    var n = token, v;
+    if (n.std) {
+        advance();
+        scope.reserve(n);
+        return n.std();
+    }
+    v = expression(0);
+    if (!v.assignment &amp;&amp; v.id !== "(") {
+        v.error("Bad expression statement.");
+    }
+    advance(";");
+    return v;
+};</pre>
+
+<p>The <code>statements</code> function parses statements until it sees
+  <code>(end)</code> or <code>}</code> which signals the end of a block.
+  The function returns a statement, an array of statements, or <code>null</code>
+  if there were no statements present.</p>
+
+<pre>var statements = function () {
+    var a = [], s;
+    while (true) {
+        if (token.id === "}" || token.id === "(end)") {
+            break;
+        }
+        s = statement();
+        if (s) {
+            a.push(s);
+        }
+    }
+    return a.length === 0 ? null : a.length === 1 ? a[0] : a;
+};</pre>
+
+<p>The <code>stmt</code> function is used to add statement symbols to the
+  symbol table. It takes a statement <code>id</code> and an <code>std</code>
+  function.</p>
+
+<pre>var stmt = function (s, f) {
+    var x = symbol(s);
+    x.std = f;
+    return x;
+};</pre>
+
+<p>The block statement wraps a pair of curly braces around a list of statements,
+  giving them a new scope. (JavaScript does not have block scope. Simplified
+  JavaScript corrects that.)</p>
+
+<pre>stmt("{", function () {
+    new_scope();
+    var a = statements();
+    advance("}");
+    scope.pop();
+    return a;
+});</pre>
+
+<p>The block function parses a block.</p>
+
+<pre>var block = function () {
+    var t = token;
+    advance("{");
+    return t.std();
+};</pre>
+
+<p>The <code>var</code> statement defines one or more variables in the current
+  block. Each name can optionally be followed by <code>=</code> and an initializing
+  expression. </p>
+
+<pre>stmt("var", function () {
+    var a = [], n, t;
+    while (true) {
+        n = token;
+        if (n.arity !== "name") {
+            n.error("Expected a new variable name.");
+        }
+        scope.define(n);
+        advance();
+        if (token.id === "=") {
+            t = token;
+            advance("=");
+            t.first = n;
+            t.second = expression(0);
+            t.arity = "binary";
+            a.push(t);
+        }
+        if (token.id !== ",") {
+            break;
+        }
+        advance(",");
+    }
+    advance(";");
+    return a.length === 0 ? null : a.length === 1 ? a[0] : a;
+});</pre>
+
+<p>The <code>while</code> statement defines a loop. It contains an expression
+  in parens and a block. </p>
+
+<pre>stmt("while", function () {
+    advance("(");
+    this.first = expression(0);
+    advance(")");
+    this.second = block();
+    this.arity = "statement";
+    return this;
+});</pre>
+
+<p>The <code>if</code> statement allows for conditional execution. If we
+  see the <code> else</code> symbol after the block, then we parse the next
+  block or <code>if</code> statement.</p>
+
+<pre>stmt("if", function () {
+    advance("(");
+    this.first = expression(0);
+    advance(")");
+    this.second = block();
+    if (token.id === "else") {
+        scope.reserve(token);
+        advance("else");
+        this.third = token.id === "if" ? statement() : block();
+    } else {
+        this.third = null;
+    }
+    this.arity = "statement";
+    return this;
+});</pre>
+
+<p>The <code>break</code> statement is used to break out of loops. </p>
+
+<pre>stmt("break", function () {
+    advance(";");
+    if (token.id !== "}") {
+        token.error("Unreachable statement.");
+    }
+    this.arity = "statement";
+    return this;
+});</pre>
+
+<p>The <code>return</code> statement is used to return from functions. It
+  can take an optional expression.</p>
+
+<pre>stmt("return", function () {
+    if (token.id !== ";") {
+        this.first = expression(0);
+    }
+    advance(";");
+    if (token.id !== "}") {
+        token.error("Unreachable statement.");
+    }
+    this.arity = "statement";
+    return this;
+});</pre>
+
+<h2>Functions</h2>
+
+<p>Functions are executable object values. A function has an optional name
+  (so that it can call itself recursively), a list of parameter names wrapped
+  in parens, and a body that is a list of statements wrapped in curly braces.
+  A function has its own scope.</p>
+
+<pre>prefix("function", function () {
+    var a = [];
+    new_scope();
+    if (token.arity === "name") {
+        scope.define(token);
+        this.name = token.value;
+        advance();
+    }
+    advance("(");
+    if (token.id !== ")") {
+        while (true) {
+            if (token.arity !== "name") {
+                token.error("Expected a parameter name.");
+            }
+            scope.define(token);
+            a.push(token);
+            advance();
+            if (token.id !== ",") {
+                break;
+            }
+            advance(",");
+        }
+    }
+    this.first = a;
+    advance(")");
+    advance("{");
+    this.second = statements();
+    advance("}");
+    this.arity = "function";
+    scope.pop();
+    return this;
+});</pre>
+
+<p>Functions are invoked with the <code>(</code> operator. It can take zero or
+more comma separated arguments. We look at the left operand to detect
+expressions that cannot possibly be function values.</p>
+
+<pre>infix("(", 80, function (left) {
+    var a = [];
+    if (left.id === "." || left.id === "[") {
+        this.arity = "ternary";
+        this.first = left.first;
+        this.second = left.second;
+        this.third = a;
+    } else {
+        this.arity = "binary";
+        this.first = left;
+        this.second = a;
+        if ((left.arity !== "unary" || left.id !== "function") &&
+                left.arity !== "name" && left.id !== "(" &&
+                left.id !== "&&" && left.id !== "||" && left.id !== "?") {
+            left.error("Expected a variable name.");
+        }
+    }
+    if (token.id !== ")") {
+        while (true)  {
+            a.push(expression(0));
+            if (token.id !== ",") {
+                break;
+            }
+            advance(",");
+        }
+    }
+    advance(")");
+    return this;
+});</pre>
+<p>The <code>this</code> symbol is a special variable. In a method invocation,
+  it is the reference to the object. </p>
+
+<pre>symbol("this").nud = function () {
+    scope.reserve(this);
+    this.arity = "this";
+    return this;
+};</pre>
+<h2>Object Literals</h2>
+
+<p>An array literal is a set of square brackets around zero or
+more comma-separated expressions. Each of the expressions is evaluated, and the
+results are collected into a new array.</p>
+
+<pre>prefix("[", function () {
+    var a = [];
+    if (token.id !== "]") {
+        while (true) {
+            a.push(expression(0));
+            if (token.id !== ",") {
+                break;
+            }
+            advance(",");
+        }
+    }
+    advance("]");
+    this.first = a;
+    this.arity = "unary";
+    return this;
+});</pre>
+
+<p>An object literal is a set of curly braces around zero or more
+comma-separated pairs. A pair is a key/expression pair separated by a
+colon (<code>:</code>).
+The key is a literal or a name which is treated as a literal.</p>
+
+<pre>prefix("{", function () {
+    var a = [];
+    if (token.id !== "}") {
+        while (true) {
+            var n = token;
+            if (n.arity !== "name" &amp;&amp; n.arity !== "literal") {
+                token.error("Bad key.");
+            }
+            advance();
+            advance(":");
+            var v = expression(0);
+            v.key = n.value;
+            a.push(v);
+            if (token.id !== ",") {
+                break;
+            }
+            advance(",");
+        }
+    }
+    advance("}");
+    this.first = a;
+    this.arity = "unary";
+    return this;
+});</pre>
+
+<h2>Things to Do and Think About</h2>
+
+<p>The tree could be passed to a code generator, or it could be
+passed to an interpreter. Very little computation is required to produce the
+tree. And as we saw, very little effort was required to write the programming
+that built the tree. </p>
+
+<p>We could make the <code>infix</code> function take an opcode that would
+aid in code generation. We could also have it take additional methods that
+would be used to do constant folding and code generation.</p>
+
+<p>We could add additional statements (such as <code>for</code>, <code>switch</code>,
+  and <code>try</code>), statement labels, more error checking, error recovery,
+  and lots more operators. We could add type specification and inference.</p>
+
+<p>We could make our language extensible. With the same ease
+that we can define new variables, we can let the programmer add new operators
+and new statements. </p>
+
+<p><a href="http://javascript.crockford.com/tdop/index.html">Try the
+demonstration of the parser that was described in this paper.</a></p>
+
+<p>Another example of this parsing technique
+can be found in <a href="http://jslint.com/">JSLint</a>.</p>
+</body></html>
