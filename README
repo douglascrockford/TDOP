@@ -5,7 +5,7 @@ douglas@crockford.com
 
 2010-11-12
 
-tdop.html contains a description of Vaugh Pratt's Top Down Operator Precedence,
+tdop.html contains a description of Vaughn Pratt's Top Down Operator Precedence,
 and describes a parser for Simplified JavaScript in Simplified JavaScript.
 
 index.html parses parse.js and displays its AST. The page depends on json2.js
