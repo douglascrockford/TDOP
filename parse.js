@@ -41,8 +41,7 @@ var make_parse = function () {
                 e = e.parent;
                 if (!e) {
                     o = symbol_table[n];
-                    return o && typeof o !== 'function' ?
-                            o : symbol_table["(name)"];
+                    return o && typeof o !== 'function' ? o : symbol_table["(name)"];
                 }
             }
         },
@@ -339,7 +338,7 @@ var make_parse = function () {
             }
         }
         if (token.id !== ")") {
-            while (true)  {
+            while (true) {
                 a.push(expression(0));
                 if (token.id !== ",") {
                     break;
