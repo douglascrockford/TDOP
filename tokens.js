@@ -1,5 +1,5 @@
 // tokens.js
-// 2010-02-18
+// 2010-02-23
 
 // (c) 2006 Douglas Crockford
 
@@ -75,7 +75,7 @@ String.prototype.tokens = function (prefix, suffix) {
 
 // name.
 
-        } else if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+        } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
             str = c;
             i += 1;
             for (;;) {
