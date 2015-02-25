@@ -1,5 +1,5 @@
 // tokens.js
-// 2010-02-23
+// 2015-02-25
 
 // (c) 2006 Douglas Crockford
 
@@ -20,9 +20,10 @@
 // will match any of these:
 //      <=  >>  >>>  <>  >=  +: -: &: &&: &&
 
-
+/*jslint this */
 
 String.prototype.tokens = function (prefix, suffix) {
+    'use strict';
     var c;                      // The current character.
     var from;                   // The index of the start of the token.
     var i = 0;                  // The index of the current character.
@@ -78,7 +79,7 @@ String.prototype.tokens = function (prefix, suffix) {
         } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
             str = c;
             i += 1;
-            for (;;) {
+            while (true) {
                 c = this.charAt(i);
                 if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
                         (c >= '0' && c <= '9') || c === '_') {
@@ -101,7 +102,7 @@ String.prototype.tokens = function (prefix, suffix) {
 
 // Look for more digits.
 
-            for (;;) {
+            while (true) {
                 c = this.charAt(i);
                 if (c < '0' || c > '9') {
                     break;
@@ -115,7 +116,7 @@ String.prototype.tokens = function (prefix, suffix) {
             if (c === '.') {
                 i += 1;
                 str += c;
-                for (;;) {
+                while (true) {
                     c = this.charAt(i);
                     if (c < '0' || c > '9') {
                         break;
@@ -170,12 +171,15 @@ String.prototype.tokens = function (prefix, suffix) {
             str = '';
             q = c;
             i += 1;
-            for (;;) {
+            while (true) {
                 c = this.charAt(i);
                 if (c < ' ') {
-                    make('string', str).error(c === '\n' || c === '\r' || c === '' ?
-                        "Unterminated string." :
-                        "Control character in string.", make('', str));
+                    make('string', str).error(
+                        c === '\n' || c === '\r' || c === '' 
+                        ? "Unterminated string." 
+                        : "Control character in string.", 
+                        make('', str)
+                    );
                 }
 
 // Look for the closing quote.
@@ -232,7 +236,7 @@ String.prototype.tokens = function (prefix, suffix) {
 
         } else if (c === '/' && this.charAt(i + 1) === '/') {
             i += 1;
-            for (;;) {
+            while (true) {
                 c = this.charAt(i);
                 if (c === '\n' || c === '\r' || c === '') {
                     break;
