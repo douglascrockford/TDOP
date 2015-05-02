@@ -3,7 +3,7 @@
 // From Top Down Operator Precedence
 // http://javascript.crockford.com/tdop/index.html
 // Douglas Crockford
-// 2015-02-25
+// 2015-05-02
 
 //jslint for, this
 
@@ -23,8 +23,8 @@ var make_parse = function () {
             var t = this.def[n.value];
             if (typeof t === "object") {
                 n.error(t.reserved 
-                ? "Already reserved." 
-                : "Already defined.");
+                    ? "Already reserved." 
+                    : "Already defined.");
             }
             this.def[n.value] = n;
             n.reserved = false;
@@ -47,8 +47,8 @@ var make_parse = function () {
                 if (!e) {
                     o = symbol_table[n];
                     return o && typeof o !== 'function' 
-                    ? o 
-                    : symbol_table["(name)"];
+                        ? o 
+                        : symbol_table["(name)"];
                 }
             }
         },
@@ -161,10 +161,10 @@ var make_parse = function () {
             }
         }
         return a.length === 0 
-        ? null 
-        : a.length === 1 
-        ? a[0] 
-        : a;
+            ? null 
+            : a.length === 1 
+                ? a[0] 
+                : a;
     };
 
     var block = function () {
@@ -490,10 +490,10 @@ var make_parse = function () {
         }
         advance(";");
         return a.length === 0 
-        ? null 
-        : a.length === 1 
-        ? a[0] 
-        : a;
+            ? null 
+            : a.length === 1 
+                ? a[0] 
+                : a;
     });
 
     stmt("if", function () {
@@ -505,8 +505,8 @@ var make_parse = function () {
             scope.reserve(token);
             advance("else");
             this.third = token.id === "if" 
-            ? statement() 
-            : block();
+                ? statement() 
+                : block();
         } else {
             this.third = null;
         }
