@@ -1,5 +1,5 @@
 // tokens.js
-// 2015-05-02
+// 2016-01-13
 
 // (c) 2006 Douglas Crockford
 
@@ -175,9 +175,9 @@ String.prototype.tokens = function (prefix, suffix) {
                 c = this.charAt(i);
                 if (c < ' ') {
                     make('string', str).error(
-                        c === '\n' || c === '\r' || c === '' 
-                            ? "Unterminated string." 
-                            : "Control character in string.", 
+                        (c === '\n' || c === '\r' || c === '')
+                            ? "Unterminated string."
+                            : "Control character in string.",
                         make('', str)
                     );
                 }
