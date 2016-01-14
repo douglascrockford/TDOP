@@ -3,7 +3,7 @@
 // From Top Down Operator Precedence
 // http://javascript.crockford.com/tdop/index.html
 // Douglas Crockford
-// 2015-05-02
+// 2016-01-13
 
 //jslint for, this
 
@@ -22,8 +22,8 @@ var make_parse = function () {
         define: function (n) {
             var t = this.def[n.value];
             if (typeof t === "object") {
-                n.error(t.reserved 
-                    ? "Already reserved." 
+                n.error((t.reserved)
+                    ? "Already reserved."
                     : "Already defined.");
             }
             this.def[n.value] = n;
@@ -36,7 +36,7 @@ var make_parse = function () {
             return n;
         },
         find: function (n) {
-            var e = this, 
+            var e = this,
                 o;
             while (true) {
                 o = e.def[n];
@@ -46,8 +46,8 @@ var make_parse = function () {
                 e = e.parent;
                 if (!e) {
                     o = symbol_table[n];
-                    return o && typeof o !== 'function' 
-                        ? o 
+                    return (o && typeof o !== 'function')
+                        ? o
                         : symbol_table["(name)"];
                 }
             }
@@ -82,10 +82,10 @@ var make_parse = function () {
     };
 
     var advance = function (id) {
-        var a, 
-            o, 
-            t, 
-            v;
+        var a;
+        var o;
+        var t;
+        var v;
         if (id && token.id !== id) {
             token.error("Expected '" + id + "'.");
         }
@@ -132,8 +132,8 @@ var make_parse = function () {
     };
 
     var statement = function () {
-        var n = token, 
-            v;
+        var n = token;
+        var v;
 
         if (n.std) {
             advance();
@@ -149,8 +149,8 @@ var make_parse = function () {
     };
 
     var statements = function () {
-        var a = [], 
-            s;
+        var a = [];
+        var s;
         while (true) {
             if (token.id === "}" || token.id === "(end)") {
                 break;
@@ -160,10 +160,10 @@ var make_parse = function () {
                 a.push(s);
             }
         }
-        return a.length === 0 
-            ? null 
-            : a.length === 1 
-                ? a[0] 
+        return a.length === 0
+            ? null
+            : a.length === 1
+                ? a[0]
                 : a;
     };
 
@@ -429,8 +429,8 @@ var make_parse = function () {
     });
 
     prefix("{", function () {
-        var a = [], 
-            n, 
+        var a = [],
+            n,
             v;
         if (token.id !== "}") {
             while (true) {
@@ -465,8 +465,8 @@ var make_parse = function () {
     });
 
     stmt("var", function () {
-        var a = [], 
-            n, 
+        var a = [],
+            n,
             t;
         while (true) {
             n = token;
@@ -489,10 +489,10 @@ var make_parse = function () {
             advance(",");
         }
         advance(";");
-        return a.length === 0 
-            ? null 
-            : a.length === 1 
-                ? a[0] 
+        return (a.length === 0)
+            ? null
+            : (a.length === 1)
+                ? a[0]
                 : a;
     });
 
@@ -504,8 +504,8 @@ var make_parse = function () {
         if (token.id === "else") {
             scope.reserve(token);
             advance("else");
-            this.third = token.id === "if" 
-                ? statement() 
+            this.third = (token.id === "if")
+                ? statement()
                 : block();
         } else {
             this.third = null;
