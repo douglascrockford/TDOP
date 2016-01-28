@@ -3,7 +3,7 @@
 // From Top Down Operator Precedence
 // http://javascript.crockford.com/tdop/index.html
 // Douglas Crockford
-// 2016-01-13
+// 2016-01-27
 
 //jslint for, this
 
@@ -36,8 +36,8 @@ var make_parse = function () {
             return n;
         },
         find: function (n) {
-            var e = this,
-                o;
+            var e = this;
+            var o;
             while (true) {
                 o = e.def[n];
                 if (o && typeof o !== 'function') {
@@ -429,9 +429,9 @@ var make_parse = function () {
     });
 
     prefix("{", function () {
-        var a = [],
-            n,
-            v;
+        var a = [];
+        var n;
+        var v;
         if (token.id !== "}") {
             while (true) {
                 n = token;
@@ -465,9 +465,9 @@ var make_parse = function () {
     });
 
     stmt("var", function () {
-        var a = [],
-            n,
-            t;
+        var a = [];
+        var n;
+        var t;
         while (true) {
             n = token;
             if (n.arity !== "name") {
