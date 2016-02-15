@@ -3,7 +3,7 @@
 // From Top Down Operator Precedence
 // http://javascript.crockford.com/tdop/index.html
 // Douglas Crockford
-// 2016-01-27
+// 2016-02-15
 
 //jslint for, this
 
@@ -40,13 +40,13 @@ var make_parse = function () {
             var o;
             while (true) {
                 o = e.def[n];
-                if (o && typeof o !== 'function') {
+                if (o && typeof o !== "function") {
                     return e.def[n];
                 }
                 e = e.parent;
                 if (!e) {
                     o = symbol_table[n];
-                    return (o && typeof o !== 'function')
+                    return (o && typeof o !== "function")
                         ? o
                         : symbol_table["(name)"];
                 }
@@ -545,8 +545,9 @@ var make_parse = function () {
     });
 
     return function (source) {
-        tokens = source.tokens('=<>!+-*&|/%^', '=<>&|');
+        tokens = source.tokens("=<>!+-*&|/%^", "=<>&|");
         token_nr = 0;
+        scope = null;
         new_scope();
         advance();
         var s = statements();
