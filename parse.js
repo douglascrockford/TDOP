@@ -405,9 +405,9 @@ var make_parse = function () {
         advance(")");
         advance("{");
         this.second = statements();
+        scope.pop();
         advance("}");
         this.arity = "function";
-        scope.pop();
         return this;
     });
 
@@ -459,8 +459,8 @@ var make_parse = function () {
     stmt("{", function () {
         new_scope();
         var a = statements();
-        advance("}");
         scope.pop();
+        advance("}");
         return a;
     });
 
