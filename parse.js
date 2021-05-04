@@ -1,11 +1,13 @@
 // parse.js
 // Parser for Simplified JavaScript written in Simplified JavaScript
 // From Top Down Operator Precedence
-// http://javascript.crockford.com/tdop/index.html
+// http://crockford.com/javascript/tdop/tdop.html
+// https://github.com/douglascrockford/TDOP
 // Douglas Crockford
-// 2016-02-15
+// 2021-05-04
+// Public Domain
 
-//jslint for, this
+// This program makes frequent use of 'this' because I wrote it when I was young and foolish.
 
 var make_parse = function () {
     var scope;
@@ -22,9 +24,11 @@ var make_parse = function () {
         define: function (n) {
             var t = this.def[n.value];
             if (typeof t === "object") {
-                n.error((t.reserved)
+                n.error(
+                    t.reserved
                     ? "Already reserved."
-                    : "Already defined.");
+                    : "Already defined."
+                );
             }
             this.def[n.value] = n;
             n.reserved = false;
@@ -46,9 +50,11 @@ var make_parse = function () {
                 e = e.parent;
                 if (!e) {
                     o = symbol_table[n];
-                    return (o && typeof o !== "function")
+                    return (
+                        (o && typeof o !== "function")
                         ? o
-                        : symbol_table["(name)"];
+                        : symbol_table["(name)"]
+                    );
                 }
             }
         },
@@ -160,11 +166,15 @@ var make_parse = function () {
                 a.push(s);
             }
         }
-        return a.length === 0
+        return (
+            a.length === 0
             ? null
-            : a.length === 1
+            : (
+                a.length === 1
                 ? a[0]
-                : a;
+                : a
+            )
+        );
     };
 
     var block = function () {
@@ -235,7 +245,11 @@ var make_parse = function () {
 
     var assignment = function (id) {
         return infixr(id, 10, function (left) {
-            if (left.id !== "." && left.id !== "[" && left.arity !== "name") {
+            if (
+                left.id !== "."
+                && left.id !== "["
+                && left.arity !== "name"
+            ) {
                 left.error("Bad lvalue.");
             }
             this.first = left;
@@ -348,9 +362,14 @@ var make_parse = function () {
             this.arity = "binary";
             this.first = left;
             this.second = a;
-            if ((left.arity !== "unary" || left.id !== "function") &&
-                    left.arity !== "name" && left.id !== "(" &&
-                    left.id !== "&&" && left.id !== "||" && left.id !== "?") {
+            if (
+                (left.arity !== "unary" || left.id !== "function")
+                && left.arity !== "name"
+                && left.id !== "("
+                && left.id !== "&&"
+                && left.id !== "||"
+                && left.id !== "?"
+            ) {
                 left.error("Expected a variable name.");
             }
         }
@@ -489,11 +508,15 @@ var make_parse = function () {
             advance(",");
         }
         advance(";");
-        return (a.length === 0)
+        return (
+            a.length === 0
             ? null
-            : (a.length === 1)
+            : (
+                a.length === 1
                 ? a[0]
-                : a;
+                : a
+            )
+        );
     });
 
     stmt("if", function () {
@@ -504,9 +527,11 @@ var make_parse = function () {
         if (token.id === "else") {
             scope.reserve(token);
             advance("else");
-            this.third = (token.id === "if")
+            this.third = (
+                token.id === "if"
                 ? statement()
-                : block();
+                : block()
+            );
         } else {
             this.third = null;
         }
