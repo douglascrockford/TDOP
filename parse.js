@@ -1,7 +1,8 @@
 // parse.js
 // Parser for Simplified JavaScript written in Simplified JavaScript
 // From Top Down Operator Precedence
-// http://javascript.crockford.com/tdop/index.html
+// http://crockford.com/javascript/tdop/tdop.html
+// https://github.com/douglascrockford/TDOP
 // Douglas Crockford
 // 2016-02-15
 
